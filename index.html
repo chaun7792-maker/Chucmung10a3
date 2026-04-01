@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Món Quà Diệu Kỳ</title>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: radial-gradient(ellipse at bottom, #1B2735 0%, #090A0F 100%); font-family: 'Arial', sans-serif; }
+        canvas { position: absolute; top: 0; left: 0; pointer-events: none; }
+        
+        /* --- GIAO DIỆN EDITOR (?edit=true) --- */
+        #editor { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #fff; color: #333; z-index: 5000; overflow-y: auto; padding: 20px; box-sizing: border-box; }
+        .ed-box { max-width: 500px; margin: 0 auto; border: 1px solid #ddd; padding: 25px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        .ed-box h2 { color: #2980b9; text-align: center; }
+        .ed-box label { display: block; font-weight: bold; margin-top: 15px; color: #34495e; }
+        .ed-box input, .ed-box textarea { width: 100%; padding: 12px; margin-top: 5px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; }
+        .btn-gen { width: 100%; padding: 15px; background: #2980b9; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 20px; }
+
+        /* --- GIAO DIỆN THIỆP --- */
+        #main-ui { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; position: relative; z-index: 10; }
+        #init-mail { font-size: 100px; cursor: pointer; animation: float 2s infinite ease-in-out; filter: drop-shadow(0 0 15px #fff); }
+        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-30px); } }
+
+        .fall-item { position: absolute; color: #FFD700; font-weight: bold; font-size: 24px; text-shadow: 0 0 10px #000; z-index: 5; }
+        .fall-img { position: absolute; width: 70px; height: 70px; border-radius: 50%; border: 3px solid #fff; object-fit: cover; z-index: 5; }
+
+        #huge-mail { display: none; font-size: 200px; position: absolute; top: -300px; transition: 2.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); cursor: pointer; z-index: 20; }
+        #huge-mail.show { top: 25%; }
+
+        #letter-paper { display: none; position: absolute; width: 85%; max-width: 450px; background: #fff; color: #333; padding: 35px; border-radius: 10px; box-shadow: 0 10px 50px rgba(0,0,0,0.8); z-index: 100; text-align: center; transform: scale(0); transition: 0.6s; }
+        #letter-paper.open { transform: scale(1); }
+        #letter-paper p { font-size: 18px; line-height: 1.6; font-style: italic; color: #2c3e50; }
+        .btn-final { padding: 10px 25px; background: #e74c3c; color: white; border: none; border-radius: 20px; cursor: pointer; font-weight: bold; margin-top: 20px; }
+    </style>
+</head>
+<body>
+
+    <audio id="music" loop></audio>
+    <canvas id="skyCanvas"></canvas>
+    <canvas id="particleCanvas"></canvas>
+
+    <div id="editor">
+        <div class="ed-box">
+            <h2>⚙️ Studio Sáng Tạo Thiệp</h2>
+            <label>Danh sách tên (cách nhau bằng dấu phẩy):</label>
+            <input type="text" id="in-n" placeholder="Nam, Lan, Trang...">
+            <label>Link ảnh rơi (cách nhau bằng dấu phẩy):</label>
+            <textarea id="in-i" placeholder="Dán link ảnh từ imgur..."></textarea>
+            <label>Lời chúc trong bức thư:</label>
+            <textarea id="in-w" placeholder="Viết tâm tình của bạn vào đây..."></textarea>
+            <label>Dòng chữ tụ lại cuối cùng (Nên viết HOA):</label>
+            <input type="text" id="in-pt" maxlength="15" placeholder="I LOVE YOU">
+            <label>Link nhạc (.mp3):</label>
+            <input type="text" id="in-m" placeholder="Dán link nhạc mp3 online">
+            <button class="btn-gen" onclick="generateLink()">TẠO LINK THIỆP</button>
+            <input type="text" id="out-l" readonly style="margin-top:20px; background:#f0f0f0; font-size: 12px;">
+        </div>
+    </div>
+
+    <div id="main-ui">
+        <div id="init-mail" onclick="startExperience()">✉️</div>
+        <div id="huge-mail" onclick="openLetter()">📩</div>
+        
+        <div id="letter-paper">
+            <h2 style="color:#e74c3c">Gửi đến bạn...</h2>
+            <p id="wish-txt"></p>
+            <button class="btn-final" onclick="showParticleMagic()">Bấm để xem điều kỳ diệu ✨</button>
+        </div>
+    </div>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const isEdit = urlParams.get('edit') === 'true';
+        const cfg = {
+            n: urlParams.get('n') || "Bạn của tôi, Gia đình, Cả lớp",
+            i: urlParams.get('i') || "",
+            w: urlParams.get('w') || "Chúc bạn một ngày tràn ngập ánh sáng và niềm vui! Mọi điều tốt đẹp nhất sẽ đến với bạn.",
+            pt: urlParams.get('pt') || "MÃI HẠNH PHÚC",
+            m: urlParams.get('m') || "https://www.bensound.com/bensound-music/bensound-love.mp3"
+        };
+
+        if(isEdit) {
+            document.getElementById('editor').style.display = 'block';
+            document.getElementById('in-n').value = cfg.n;
+            document.getElementById('in-i').value = cfg.i;
+            document.getElementById('in-w').value = cfg.w;
+            document.getElementById('in-pt').value = cfg.pt;
+            document.getElementById('in-m').value = cfg.m;
+        }
+
+        function generateLink() {
+            const base = window.location.origin + window.location.pathname;
+            const link = `${base}?n=${encodeURIComponent(document.getElementById('in-n').value)}&i=${encodeURIComponent(document.getElementById('in-i').value)}&w=${encodeURIComponent(document.getElementById('in-w').value)}&pt=${encodeURIComponent(document.getElementById('in-pt').value)}&m=${encodeURIComponent(document.getElementById('in-m').value)}`;
+            document.getElementById('out-l').value = link;
+        }
+
+        // --- HỆ THỐNG TRỜI SAO XANH & SAO BĂNG ---
+        const sky = document.getElementById('skyCanvas');
+        const sCtx = sky.getContext('2d');
+        let stars = [];
+        function initSky() {
+            sky.width = window.innerWidth; sky.height = window.innerHeight;
+            for(let i=0; i<200; i++) stars.push({x: Math.random()*sky.width, y: Math.random()*sky.height, r: Math.random()*1.5, o: Math.random()});
+        }
+        function animateSky() {
+            sCtx.clearRect(0,0,sky.width, sky.height);
+            sCtx.fillStyle = "white";
+            stars.forEach(s => {
+                sCtx.globalAlpha = Math.abs(Math.sin(Date.now()*0.001 + s.o*10));
+                sCtx.beginPath(); sCtx.arc(s.x, s.y, s.r, 0, Math.PI*2); sCtx.fill();
+            });
+            requestAnimationFrame(animateSky);
+        }
+        function launchShootingStars() {
+            for(let i=0; i<5; i++) { // 3-5 cái
+                setTimeout(() => {
+                    let x = Math.random()*sky.width, y = 0;
+                    let iv = setInterval(() => {
+                        sCtx.strokeStyle = "rgba(255,255,255,0.7)"; sCtx.lineWidth=2;
+                        sCtx.beginPath(); sCtx.moveTo(x,y); sCtx.lineTo(x-100, y+100); sCtx.stroke();
+                        x-=15; y+=15; if(y>sky.height) clearInterval(iv);
+                    }, 20);
+                }, i * 1500);
+            }
+        }
+
+        // --- HỆ THỐNG HẠT (PARTICLE TEXT) ---
+        const pCanvas = document.getElementById('particleCanvas');
+        const pCtx = pCanvas.getContext('2d');
+        let particles = [];
+        function createParticlesFromShape(shapeType, text = "") {
+            pCanvas.width = window.innerWidth; pCanvas.height = window.innerHeight;
+            pCtx.fillStyle = "white";
+            pCtx.clearRect(0,0,pCanvas.width, pCanvas.height);
+            
+            if(shapeType === 'heart') {
+                for (let i = 0; i < Math.PI * 2; i += 0.05) {
+                    let x = 16 * Math.sin(i) ** 3;
+                    let y = -(13 * Math.cos(i) - 5 * Math.cos(2 * i) - 2 * Math.cos(3 * i) - Math.cos(4 * i));
+                    pCtx.fillRect(pCanvas.width/2 + x*15, pCanvas.height/2 + y*15, 2, 2);
+                }
+            } else {
+                pCtx.font = "bold 60px Arial";
+                pCtx.textAlign = "center";
+                pCtx.fillText(text, pCanvas.width/2, pCanvas.height/2);
+            }
+
+            const imgData = pCtx.getImageData(0,0,pCanvas.width, pCanvas.height).data;
+            pCtx.clearRect(0,0,pCanvas.width, pCanvas.height);
+            
+            let coords = [];
+            for(let y=0; y<pCanvas.height; y+=4) {
+                for(let x=0; x<pCanvas.width; x+=4) {
+                    if(imgData[(y*pCanvas.width + x)*4 + 3] > 128) coords.push({tx: x, ty: y});
+                }
+            }
+
+            // Sync particles
+            if(particles.length === 0) {
+                coords.forEach(c => particles.push({x: Math.random()*pCanvas.width, y: Math.random()*pCanvas.height, tx: c.tx, ty: c.ty, c: `hsl(${Math.random()*360}, 100%, 75%)`}));
+            } else {
+                // Morphing logic
+                for(let i=0; i<particles.length; i++) {
+                    let target = coords[i % coords.length];
+                    particles[i].tx = target.tx; particles[i].ty = target.ty;
+                }
+            }
+        }
+
+        function animateParticles() {
+            pCtx.clearRect(0,0,pCanvas.width, pCanvas.height);
+            particles.forEach(p => {
+                p.x += (p.tx - p.x) * 0.07; p.y += (p.ty - p.y) * 0.07;
+                pCtx.fillStyle = p.c;
+                pCtx.beginPath(); pCtx.arc(p.x, p.y, 2, 0, Math.PI*2); pCtx.fill();
+            });
+            requestAnimationFrame(animateParticles);
+        }
+
+        // --- FLOW ĐẠO DIỄN ---
+        function startExperience() {
+            document.getElementById('music').src = cfg.m;
+            document.getElementById('music').play();
+            document.getElementById('init-mail').style.display = 'none';
+            initSky(); animateSky(); launchShootingStars();
+            
+            const items = [...cfg.n.split(','), ...cfg.i.split(',').filter(v=>v)];
+            let idx = 0;
+            let iv = setInterval(() => {
+                if(idx >= items.length) {
+                    clearInterval(iv);
+                    setTimeout(() => { 
+                        let h = document.getElementById('huge-mail');
+                        h.style.display = 'block'; setTimeout(()=>h.classList.add('show'), 100);
+                    }, 3000);
+                    return;
+                }
+                let val = items[idx++].trim();
+                let el = document.createElement(val.startsWith('http') ? 'img' : 'div');
+                el.className = val.startsWith('http') ? 'fall-img' : 'fall-item';
+                if(val.startsWith('http')) el.src = val; else el.innerText = val;
+                el.style.left = Math.random()*80+10+'%';
+                document.body.appendChild(el);
+                el.animate([{top:'-100px', opacity:1}, {top:'110vh', opacity:0}], {duration: 6000}).onfinish = () => el.remove();
+            }, 800);
+        }
+
+        function openLetter() {
+            document.getElementById('huge-mail').style.display = 'none';
+            document.getElementById('wish-txt').innerText = cfg.w;
+            document.getElementById('letter-paper').style.display = 'block';
+            setTimeout(() => document.getElementById('letter-paper').classList.add('open'), 100);
+        }
+
+        function showParticleMagic() {
+            document.getElementById('letter-paper').style.display = 'none';
+            createParticlesFromShape('heart');
+            animateParticles();
+            setTimeout(() => {
+                createParticlesFromShape('text', cfg.pt);
+            }, 4000); // 4 giây sau khi hiện tim thì chuyển thành chữ
+        }
+    </script>
+</body>
+</html>
